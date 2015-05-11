@@ -1,25 +1,252 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "Peer Assessment 1 - Reproducible Research"
+author: "Antoine Freches"
+date: "Friday, May 08, 2015"
+output: html_document
 ---
 
+### Loading and preprocessing the data
 
-## Loading and preprocessing the data
+#### 1. Load the data (i.e. read.csv())
+
+After setting the working directory to the folder where the data resides, we simply use the read.csv function with its default parameters. 
+```{r}
+setwd("C:/Users/user/Desktop/Academics/MOOCs/Data Analysis/Data Science - JHU - Coursera/Reproducible Research - JHU - Coursera/Week 2")
+myDF=read.csv("activity.csv")
+```
+
+#### 2. Process/transform the data (if necessary) into a format suitable for your analysis
+
+The resulting data frame appears to be in a suitable format for the time being. No transformation is necessary at this stage: 
+
+```{r}
+class(myDF)
+head(myDF)
+dim(myDF)
+names(myDF)
+class(myDF$steps)
+class(myDF$date)
+class(myDF$interval)
+```
+
+### What is the mean total number of steps taken per day?
+
+#### 1. Calculate the total number of steps taken per day
+
+We use the "split" function to get the number of steps per day. 
+```{r}
+myList=split(myDF$steps,myDF$date) # This creates a list of lists. The inner lists each represent one day, and contain each one integer vector (number of steps per 5-min time intervals) 
+class(myList) # This is a list. 
+length(myList) # This is the total number of days during the 2 months period (61 days)
+class(myList[1]) # The elements within the outer list are lists themselves.
+myList[1] # We see only NAs for the first day. 
+length(myList[1]) # Each inner list is of length 1. It actually contains a vector of integers. 
+```
+
+We can access the content of each of the inner lists by using the "double squared-bracket" subsetting ("[[]]"). 
+```{r}
+class(myList[[10]]) # The double squared-bracket enables us to directly access the content of the inner list, that is the integer vector. 
+myList[[10]]
+length(myList[[1]]) # These are the number of 5-min intervals during the day. This is the same value for each day (288).
+```
+We can also access the data for the number of steps within the 5-min intervals. That is, the single elements of the integer vector of each list. 
+
+```{r}
+myList[[10]][1] # This way of using squared brackets followed by single brackets enables us to access individual elements of the integer vectors. 
+myList[[10]][111]
+```
+
+Now we want to calculate the total number of steps for each day. So we want to sum the values of each of our integer vectors. 
+
+```{r}
+myLA=lapply(myList,sum) # The lapply function enables us to iteratively sum all the values of each integer vector, keeping the final result as a list of sum results. 
+head(myLA)
+class(myLA)
+myUL=unlist(myLA) # For convenience, we "unlist", that is, we transform our list in a simple integer vector. 
+class(myUL) # As expected the result is an integer vector
+length(myUL) # As expected, the result is the number of days in the 2 months period, (61 days)
+myUL # This integer vector has for each day the total number of steps
+myUL2=myUL[!is.na(myUL)] # We subset out the days for which there are some NAs. 
+length(myUL2) # We have now 53 days in our integer vector, compared to 61 previously. 
+myUL2 # This is the total number of steps take per day. 
+```
+
+#### 2. If you do not understand the difference between a histogram and a barplot, research the difference between them. Make a histogram of the total number of steps taken each day
+
+```{r}
+par(mfrow=c(1,2))
+hist(myUL,breaks=20)
+hist(myUL2,breaks=20) # We observe that there is no difference between the 2 histograms: removing the days where there were NAs was actually taken care of by default within the "hist" function.
+```
+
+#### 3. Calculate and report the mean and median of the total number of steps taken per day
+```{r}
+
+mean(myUL) # the mean function does not work by default when some elements contain NAs
+mean(myUL,na.rm=TRUE) # We get a result when specifying the option na.rm=TRUE
+mean(myUL2) # We check that removing the NAs manually gives the same result as the option above.
+
+median(myUL) # the median function does not work by default when some elements contain NAs
+median(myUL,na.rm=TRUE) # We get a result when specifying the option na.rm=TRUE
+median(myUL2) # We check that removing the NAs manually gives the same result as the option above.
+
+```
+
+### What is the average daily activity pattern?
+
+#### 1. Make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
+
+We opt here for a mechanistic approach, counting NAs as 0 and considering that each 5-min slot is represented 61 times. 
+
+```{r} 
+A=rep(0,288)
+for (i in 1:288){
+  for (j in 1:61){
+    if (is.na(myList[[j]][i])){
+      A[i]=A[i]
+  }
+    else{
+      A[i]=A[i]+myList[[j]][i]
+    }}
+  A[i]=A[i]/61
+}
+head(A)
+par(mfrow=c(1,1))
+plot(myDF$interval[1:288],A,type="l",xlab="Time of the day",ylab="Nb of steps",main="Average Daily Activity Pattern")
+```
+
+#### 2. Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+Here we simply make use of the which.max function to find the position of the max within the vector A that was defined above. 
+
+```{r}
+which.max(A)
+myDF$interval[which.max(A)] # this is the time from 8h35 to 8h40 AM
+```
+
+### Imputing missing values
+
+#### 1. Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)
+
+We here simply use the is.na function. 
+
+```{r}
+sum(is.na(myDF$steps))
+```
+
+#### 2. Devise a strategy for filling in all of the missing values in the dataset. The strategy does not need to be sophisticated. For example, you could use the mean/median for that day, or the mean for that 5-minute interval, etc.
+
+We will replace each NA by the mean number of steps for that given time interval, averaged across all days. 
+
+#### 3. Create a new dataset that is equal to the original dataset but with the missing data filled in.
+
+We start by creating a copy of our original data frame. 
+```{r}
+myDF2=myDF
+```
+
+We then replace its NA by the mean value for that time slot as computed previously (this average value is in the variable A).
+```{r}
+for (i in 1:61){
+  for (j in 1:288){
+    if (is.na(myList[[i]][j])){
+      myDF2$steps[(i-1)*288+j]=A[j]
+  }}}
+```
+
+We then use the same strategy as previously to sum the total number of steps for each day. 
+
+```{r}
+myList2=split(myDF2$steps,myDF2$date) 
+myLA2=lapply(myList2,sum) 
+myUL22=unlist(myLA2)
+```
+
+#### 4. Make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day. Do these values differ from the estimates from the first part of the assignment? What is the impact of imputing missing data on the estimates of the total daily number of steps?
+
+We draw the 2 histograms next to each other to compare the effect of replacing NAs with the average for the slot. 
+
+```{r}
+par(mfrow=c(1,2))
+hist(myUL2,breaks=20)
+hist(myUL22,breaks=20) 
+```
+
+We see that the average number of steps taken each day increases by about 200 steps, while the median number of steps increases by 370 steps.
+
+```{r}
+mean(myUL22)
+mean(myUL2) 
+
+median(myUL22)
+median(myUL2)
+```
+
+### Are there differences in activity patterns between weekdays and weekends?
+
+#### 1. Create a new factor variable in the dataset with two levels - "weekday" and "weekend" indicating whether a given date is a weekday or weekend day. 
+
+We create a vector that says whether each date in our data frame is a weekday or falls in a weekend. 
+Then we add that vector to our data frame. 
+
+```{r}
+myWeekdays=weekdays(as.Date(myDF2$date))
+myWeekdays[myWeekdays=="Saturday" | myWeekdays=="Sunday"]="weekend"
+myWeekdays[myWeekdays!="weekend"]="weekday"
+myDF2$weekday=as.factor(myWeekdays)
+head(myDF2$weekday)
+tail(myDF2$weekday)
+```
+
+#### 2. Make a panel plot containing a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis)
+For that we create to subsets of our new data frame, one with weekdays only and one with weekends only. 
 
 
+```{r}
+DF1=myDF2[myDF2$weekday=="weekday",]
+DF2=myDF2[myDF2$weekday=="weekend",]
+```
 
-## What is mean total number of steps taken per day?
+We check that we have not lost any data in the process. 
+```{r}
+dim(myDF2)[1]
+dim(DF1)[1]
+dim(DF2)[1]
+dim(myDF2)[1]==dim(DF1)[1]+dim(DF2)[1]
+a=dim(DF1)[1]/288 # this is 45
+b=dim(DF2)[1]/288 # this is 16 
+```
 
+We see that there are `r a` weekdays and `r b` weekend days. 
+We now loop over the total number of weekdays/weekends to compute our average.
 
+```{r}
+B=rep(0,288)
+for (i in 1:288){
+  for (j in 1:45){
+      B[i]=B[i]+DF1$steps[(j-1)*288+i]}
+  B[i]=B[i]/a
+}
 
-## What is the average daily activity pattern?
+C=rep(0,288)
+for (i in 1:288){
+  for (j in 1:16){
+      C[i]=C[i]+DF2$steps[(j-1)*288+i]}
+  C[i]=C[i]/b
+}
+```
 
+We finally plot our desired curves. One option is to have 2 separate plots... 
+```{r}
+par(mfrow=c(2,1))
+plot(myDF$interval[1:288],B,type="l",main="Weekdays",xlab="Time of the day",ylab="Nb of steps")
+plot(myDF$interval[1:288],C,type="l",main="Weekends",xlab="Time of the day",ylab="Nb of steps")
+```
 
+... or to have one plot with the 2 curves on the same plot.
+```{r}
+par(mfrow=c(1,1))
+plot(myDF$interval[1:288],B,type="l",xlab="Time of the day",ylab="Nb of steps")
+lines(myDF$interval[1:288],C,col="red")
+legend("topright",col=c("black","red"),legend=c("Weekends","Weekdays"),lwd=1)
+```
 
-## Imputing missing values
-
-
-
-## Are there differences in activity patterns between weekdays and weekends?
